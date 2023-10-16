@@ -203,6 +203,64 @@ router.post("/sendVerify", async (req, res) => {
   }
 });
 
+// google login, register
+router.post("/google/login", async (req, res) => {
+  const { userData } = req.body;
+
+  // check if userId exist.
+  // const userIdExist = await User.findOne({ googleId: userData.googleId });
+  // if (userIdExist) return res.status(400).send("Email已經註冊過");
+  // // register the user
+  // const newUser = new User({
+  //   userName: userData.name,
+  //   googleId: userData.googleId,
+  //   userId: userData.email,
+  //   userPw: userData.googleId,
+  //   confirmed: true,
+  // });
+  // try {
+  //   const saveUser = await newUser.save();
+  //   return res.status(200).send({
+  //     message: "Success",
+  //     saveObject: saveUser,
+  //   });
+  // } catch (e) {
+  //   return res.status(400).send({
+  //     message: "User not saved",
+  //     error: e,
+  //   });
+  // }
+
+  await User.findOne({ googleId: userData.googleId }).then((foundUser) => {
+    if (foundUser) {
+      // user is already existed
+      console.log(foundUser);
+      const tokenObject = { _id: foundUser._id, userId: foundUser.userId };
+      const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
+      return res
+        .status(200)
+        .send({ Sueeess: true, token: token, user: foundUser });
+    } else {
+      // add new user into database
+      const newUser = new User({
+        userName: userData.name,
+        googleId: userData.googleId,
+        confirmed: true,
+        userId: userData.email,
+        userPw: userData.googleId,
+      });
+
+      newUser.save().then((user) => {
+        console.log("New User created.");
+        console.log(user);
+        const tokenObject = { _id: user._id, userId: user.userId };
+        const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
+        return res.send({ success: true, token: token, user: user });
+      });
+    }
+  });
+});
+
 // update user data
 router.post("/update", async (req, res) => {
   const { userId, userName } = req.body;
