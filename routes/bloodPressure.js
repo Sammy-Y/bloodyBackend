@@ -1,6 +1,8 @@
 import express from "express";
 import BloodPressure from "../models/bloodPressure-model.js";
+import User from "../models/user-model.js";
 import { pressureValidation } from "../validation.js";
+import axios from "axios";
 
 const router = express.Router();
 
@@ -36,8 +38,34 @@ router.get("/getAllbp/:userId", async (req, res) => {
 
 // making a new BP record
 router.post("/newbp", async (req, res) => {
-  const { systolicPressure, diastolicPressure, heartRate, userId } = req.body;
+  const { systolicPressure, diastolicPressure, heartRate, userId, addDate } =
+    req.body;
+  let lineToken = "";
   console.log(req.body);
+  console.log(addDate);
+
+  await User.findOne({ userId: userId }).then(async (user) => {
+    if (user.lineToken) {
+      lineToken = user.lineToken;
+      console.log(lineToken);
+      // send line notify to user
+      await axios
+        .post("https://notify-api.line.me/api/notify", null, {
+          params: {
+            message: "Hello User",
+          },
+          headers: {
+            Authorization: `Bearer ${lineToken}`,
+          },
+        })
+        .then((response) => {
+          console.log(response);
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+  });
 
   // validate the BP before making a new one
   const { error } = pressureValidation(req.body);
@@ -49,11 +77,12 @@ router.post("/newbp", async (req, res) => {
     heartRate: heartRate,
     tester: req.user._id,
     userId: userId,
+    testDate: addDate,
   });
 
   try {
     // save new BP into DB
-    const saveBP = await newBP.save();
+    // const saveBP = await newBP.save();
     res.status(200).send({
       message: "Success.",
       saveObject: saveBP,

@@ -5,6 +5,7 @@ import { registerValidation, loginValidation } from "../validation.js";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import axios from "axios";
 dotenv.config();
 import passport from "passport";
 
@@ -83,6 +84,45 @@ router.get(
     res.redirect("http://localhost:3000/login");
   }
 );
+
+// redirect from line notify and get response code
+router.post("/api/linenotify", async (req, res) => {
+  const { code, state } = req.body;
+  // console.log(state.split(",")[1]);
+  const userId = state.split(",")[1];
+  await axios
+    .post("https://notify-bot.line.me/oauth/token", null, {
+      params: {
+        grant_type: "authorization_code",
+        // redirect_uri: `${process.env.CLIENT_IPADDRESS}:8000/user/api/linenotify`,
+        redirect_uri: `http://localhost:8000/user/api/linenotify`,
+        client_id: `${process.env.LINE_CLIENT_ID}`,
+        client_secret: `${process.env.LINE_CLIENT_SECRET}`,
+        code: code,
+      },
+    })
+    .then(async (response) => {
+      console.log(response.data);
+      const lineToken = response.data.access_token;
+      // console.log(response.data.access_token);
+      // res.redirect(`${process.env.CLIENT_IPADDRESS}:3000/profile`);
+      await User.findOneAndUpdate(
+        { userId: userId },
+        { lineToken: lineToken },
+        { new: true }
+      ).then((user) => {
+        console.log(user);
+      });
+      res.redirect(`http://localhost:3000/profile`);
+    });
+});
+
+router.post("/api/linenotify", (req, res) => {
+  const { userId } = req.body;
+  window.location.href = `https://notify-bot.line.me/oauth/authorize?response_type=code&scope=notify&response_mode=form_post&state=f094a459&client_id=PdLvERXPclVj8N9uUy2Tlo&redirect_uri=http://localhost:8000/user/api/linenotify&state=${userId}`;
+});
+
+// router.post("https://notify-bot.line.me/oauth/token", { params: {} });
 
 // register the user
 router.post("/register", async (req, res) => {
@@ -164,9 +204,14 @@ router.post("/login", async (req, res) => {
       if (err) return res.status(400).send(err);
       else if (isMatch) {
         // entered password is the same with DB
+        const userData = {
+          userId: user.userId,
+          userName: user.userName,
+          confirmed: foundUser.confirmed,
+        };
         const tokenObject = { _id: user._id, userId: user.userId };
         const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
-        return res.send({ success: true, token: token, user: user });
+        return res.send({ success: true, token: token, user: userData });
       } else return res.status(401).send("密碼錯誤！");
     });
   } catch (err) {
@@ -234,12 +279,17 @@ router.post("/google/login", async (req, res) => {
   await User.findOne({ googleId: userData.googleId }).then((foundUser) => {
     if (foundUser) {
       // user is already existed
-      console.log(foundUser);
+      const userData = {
+        userId: foundUser.userId,
+        userName: foundUser.userName,
+        confirmed: foundUser.confirmed,
+      };
+      console.log(userData);
       const tokenObject = { _id: foundUser._id, userId: foundUser.userId };
       const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
       return res
         .status(200)
-        .send({ Sueeess: true, token: token, user: foundUser });
+        .send({ Sueeess: true, token: token, user: userData });
     } else {
       // add new user into database
       const newUser = new User({
@@ -253,9 +303,14 @@ router.post("/google/login", async (req, res) => {
       newUser.save().then((user) => {
         console.log("New User created.");
         console.log(user);
+        const userData = {
+          userId: user.userId,
+          userName: user.userName,
+          confirmed: foundUser.confirmed,
+        };
         const tokenObject = { _id: user._id, userId: user.userId };
         const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
-        return res.send({ success: true, token: token, user: user });
+        return res.send({ success: true, token: token, user: userData });
       });
     }
   });
@@ -271,9 +326,14 @@ router.post("/update", async (req, res) => {
       { new: true }
     );
 
+    const userData = {
+      userId: user.userId,
+      userName: user.userName,
+      confirmed: foundUser.confirmed,
+    };
     const tokenObject = { _id: user._id, userId: user.userId };
     const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
-    return res.send({ success: true, token: token, user: user });
+    return res.send({ success: true, token: token, user: userData });
   } catch (e) {
     return res.status(500).send({ Error: e });
   }

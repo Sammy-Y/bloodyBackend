@@ -26,11 +26,17 @@ const userSchema = mongoose.Schema({
     maxLength: 200,
   },
   confirmed: {
+    // 信箱驗證
     type: Boolean,
     default: false,
   },
+  lineToken: {
+    // line notify token
+    type: String,
+    default: "",
+  },
   date: {
-    // 註冊日期ㄣ
+    // 註冊日期
     type: Date,
     default: Date.now(),
   },

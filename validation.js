@@ -51,6 +51,7 @@ export const pressureValidation = (data) => {
       "number.max": `心跳需小於{#limit}`,
     }),
     userId: Joi.string().min(6).max(50).required().email(),
+    addDate: Joi.date(),
   });
 
   return schema.validate(data);
