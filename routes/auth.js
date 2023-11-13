@@ -40,6 +40,28 @@ router.get("/testAPI", (req, res) => {
   return res.json(msgObj);
 });
 
+// get user profile
+router.get("/userProfile/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  await User.findOne({ userId: userId })
+    .then((user) => {
+      const userData = {
+        userId: user.userId,
+        userName: user.userName,
+        confirmed: user.confirmed,
+        lineNotify: user.lineToken && user.lineToken !== "" ? true : false,
+      };
+      // token 加密
+      const tokenObject = { _id: user._id, userId: user.userId };
+      const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
+      return res.send({ success: true, token: token, user: userData });
+    })
+    .catch((e) => {
+      return res.send({ success: false, error: e });
+    });
+});
+
 // verify the email when user click verify link
 router.get(`/confirmation/:token`, async (req, res) => {
   const { token } = req.params;
@@ -94,8 +116,8 @@ router.post("/api/linenotify", async (req, res) => {
     .post("https://notify-bot.line.me/oauth/token", null, {
       params: {
         grant_type: "authorization_code",
-        // redirect_uri: `${process.env.CLIENT_IPADDRESS}:8000/user/api/linenotify`,
-        redirect_uri: `http://localhost:8000/user/api/linenotify`,
+        redirect_uri: `${process.env.CLIENT_IPADDRESS}:8000/user/api/linenotify`,
+        // redirect_uri: `http://localhost:8000/user/api/linenotify`,
         client_id: `${process.env.LINE_CLIENT_ID}`,
         client_secret: `${process.env.LINE_CLIENT_SECRET}`,
         code: code,
@@ -106,6 +128,8 @@ router.post("/api/linenotify", async (req, res) => {
       const lineToken = response.data.access_token;
       // console.log(response.data.access_token);
       // res.redirect(`${process.env.CLIENT_IPADDRESS}:3000/profile`);
+
+      // set user's line notify token into DB
       await User.findOneAndUpdate(
         { userId: userId },
         { lineToken: lineToken },
@@ -113,7 +137,8 @@ router.post("/api/linenotify", async (req, res) => {
       ).then((user) => {
         console.log(user);
       });
-      res.redirect(`http://localhost:3000/profile`);
+      // res.redirect(`http://localhost:3000/profile`);
+      res.redirect(`${process.env.CLIENT_IPADDRESS}:3000/profile`);
     });
 });
 
@@ -207,7 +232,8 @@ router.post("/login", async (req, res) => {
         const userData = {
           userId: user.userId,
           userName: user.userName,
-          confirmed: foundUser.confirmed,
+          confirmed: user.confirmed,
+          lineNotify: user.lineToken && user.lineToken !== "" ? true : false,
         };
         const tokenObject = { _id: user._id, userId: user.userId };
         const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
@@ -283,6 +309,8 @@ router.post("/google/login", async (req, res) => {
         userId: foundUser.userId,
         userName: foundUser.userName,
         confirmed: foundUser.confirmed,
+        lineNotify:
+          foundUser.lineToken && foundUser.lineToken !== "" ? true : false,
       };
       console.log(userData);
       const tokenObject = { _id: foundUser._id, userId: foundUser.userId };
@@ -306,7 +334,8 @@ router.post("/google/login", async (req, res) => {
         const userData = {
           userId: user.userId,
           userName: user.userName,
-          confirmed: foundUser.confirmed,
+          confirmed: user.confirmed,
+          lineNotify: user.lineToken && user.lineToken !== "" ? true : false,
         };
         const tokenObject = { _id: user._id, userId: user.userId };
         const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
@@ -318,23 +347,38 @@ router.post("/google/login", async (req, res) => {
 
 // update user data
 router.post("/update", async (req, res) => {
-  const { userId, userName } = req.body;
+  const { user, state } = req.body;
+  console.log(req.body);
   try {
-    const user = await User.findOneAndUpdate(
-      { userId: userId },
-      { userName: userName },
-      { new: true }
-    );
+    let updateUser = {};
+    if (state === "Profile") {
+      // update user profile
+      updateUser = await User.findOneAndUpdate(
+        { userId: user.userId },
+        { userName: user.userName },
+        { new: true }
+      );
+    } else if (state === "lineNotify") {
+      // cancel line notify
+      updateUser = await User.findOneAndUpdate(
+        { userId: user.userId },
+        { lineToken: "" },
+        { new: true }
+      );
+    }
 
     const userData = {
-      userId: user.userId,
-      userName: user.userName,
-      confirmed: foundUser.confirmed,
+      userId: updateUser.userId,
+      userName: updateUser.userName,
+      confirmed: updateUser.confirmed,
+      lineNotify:
+        updateUser.lineToken && updateUser.lineToken !== "" ? true : false,
     };
     const tokenObject = { _id: user._id, userId: user.userId };
     const token = jwt.sign(tokenObject, process.env.PASSPORT_SECRET);
     return res.send({ success: true, token: token, user: userData });
   } catch (e) {
+    console.log(e);
     return res.status(500).send({ Error: e });
   }
 });
