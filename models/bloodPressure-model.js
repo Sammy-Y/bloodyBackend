@@ -25,8 +25,13 @@ const bloodPressureSchema = mongoose.Schema({
   userId: {
     type: String,
   },
-  testDate: {
-    type: Date,
+  userAddDate: {
+    // 用戶選擇的日期
+    type: String,
+  },
+  remark: {
+    // 備註
+    type: String,
   },
   date: {
     // 測試日期、時間

@@ -28,7 +28,7 @@ router.get("/getAllbp/:userId", async (req, res) => {
     const bpDetail = await BloodPressure.find({
       userId: userId,
     }).sort({
-      date: "desc",
+      userAddDate: "desc",
     });
     return res.status(200).send({ success: true, data: bpDetail });
   } catch (e) {
@@ -38,11 +38,17 @@ router.get("/getAllbp/:userId", async (req, res) => {
 
 // making a new BP record
 router.post("/newbp", async (req, res) => {
-  const { systolicPressure, diastolicPressure, heartRate, userId, addDate } =
-    req.body;
+  const {
+    systolicPressure,
+    diastolicPressure,
+    heartRate,
+    userId,
+    addDate,
+    remark,
+  } = req.body;
   let lineToken = "";
   console.log(req.body);
-  console.log(addDate);
+  console.log("addDate", addDate);
 
   // validate the BP before making a new one
   const { error } = pressureValidation(req.body);
@@ -54,7 +60,8 @@ router.post("/newbp", async (req, res) => {
     heartRate: heartRate,
     tester: req.user._id,
     userId: userId,
-    testDate: addDate,
+    userAddDate: addDate,
+    remark: remark,
   });
 
   try {
@@ -74,6 +81,7 @@ router.post("/newbp", async (req, res) => {
           } else {
             pressureMessage = "血壓高需注意，請注意身體狀況並就醫！";
           }
+          // 發送line 通知
           const message = `${user.userName}先生/女士 家屬您好，今天量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
           console.log(lineToken);
           // send line notify to user

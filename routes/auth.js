@@ -43,6 +43,7 @@ router.get("/testAPI", (req, res) => {
 // get user profile
 router.get("/userProfile/:userId", async (req, res) => {
   const { userId } = req.params;
+  console.log(userId);
 
   await User.findOne({ userId: userId })
     .then((user) => {
@@ -116,6 +117,7 @@ router.post("/api/linenotify", async (req, res) => {
     .post("https://notify-bot.line.me/oauth/token", null, {
       params: {
         grant_type: "authorization_code",
+        // redirect_uri: `${process.env.CLIENT_IPADDRESS}:8000/user/api/linenotify`,
         redirect_uri: `${process.env.CLIENT_IPADDRESS}:8000/user/api/linenotify`,
         // redirect_uri: `http://localhost:8000/user/api/linenotify`,
         client_id: `${process.env.LINE_CLIENT_ID}`,
@@ -214,7 +216,7 @@ router.post("/register", async (req, res) => {
 // user login
 router.post("/login", async (req, res) => {
   const { userId, userPw } = req.body;
-
+  console.log(req.body);
   // check validation of data
   const { error } = loginValidation(req.body);
   if (error) return res.status(400).send(error.details[0].message);

@@ -12,8 +12,19 @@ JWT(passport);
 
 import cookieSession from "cookie-session";
 
+import https from "https";
+import fs from "fs";
+
 // Initial Express
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const app = express();
+
+// 讀取 SSL 憑證和私鑰文件
+const privateKey = fs.readFileSync("./server.key");
+const certificate = fs.readFileSync("./server.crt", "utf8");
+// const ca = fs.readFileSync('/path/to/ca.pem', 'utf8');
+
+const credentials = { key: privateKey, cert: certificate };
 
 // connect to MongoDB
 mongoose
@@ -47,3 +58,11 @@ app.use(
 app.listen(8000, () => {
   console.log("Server is running on port 8000.");
 });
+
+// 創建 HTTPS 服務器
+const PORT = 8000;
+
+// const httpsServer = https.createServer(credentials, app);
+// httpsServer.listen(PORT, () => {
+//   console.log(`Server is running on https://localhost:${PORT}`);
+// });
