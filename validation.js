@@ -52,6 +52,7 @@ export const pressureValidation = (data) => {
     }),
     userId: Joi.string().min(6).max(50).required().email(),
     addDate: Joi.date(),
+    remark: Joi.string(),
   });
 
   return schema.validate(data);

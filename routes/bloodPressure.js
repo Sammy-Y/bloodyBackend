@@ -3,6 +3,7 @@ import BloodPressure from "../models/bloodPressure-model.js";
 import User from "../models/user-model.js";
 import { pressureValidation } from "../validation.js";
 import axios from "axios";
+import ExcelJs from "exceljs";
 
 const router = express.Router();
 
@@ -20,7 +21,6 @@ router.get("/testAPI", (req, res) => {
 
 // get all bloody data
 router.get("/getAllbp/:userId", async (req, res) => {
-  const bpDetail = [];
   console.log("getALlbp");
   const { userId } = req.params;
   console.log("body", req.params);
@@ -36,6 +36,25 @@ router.get("/getAllbp/:userId", async (req, res) => {
   }
 });
 
+// 依照日期獲取血壓資料
+router.get("/getBP", async (req, res) => {
+  // console.log(req.query);
+  const { userId, date } = req.query;
+
+  console.log(userId, date);
+  let bloodPressure = [];
+  try {
+    bloodPressure = await BloodPressure.find({
+      userId: userId,
+      userAddDate: { $regex: new RegExp(date, "i") },
+    });
+    console.log(bloodPressure);
+  } catch (e) {
+    return res.send(e);
+  }
+  return res.status(200).send({ success: true, bloodPressure: bloodPressure });
+});
+
 // making a new BP record
 router.post("/newbp", async (req, res) => {
   const {
@@ -48,7 +67,6 @@ router.post("/newbp", async (req, res) => {
   } = req.body;
   let lineToken = "";
   console.log(req.body);
-  console.log("addDate", addDate);
 
   // validate the BP before making a new one
   const { error } = pressureValidation(req.body);
@@ -83,7 +101,6 @@ router.post("/newbp", async (req, res) => {
           }
           // 發送line 通知
           const message = `${user.userName}先生/女士 家屬您好，今天量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
-          console.log(lineToken);
           // send line notify to user
           await axios
             .post("https://notify-api.line.me/api/notify", null, {
@@ -112,4 +129,8 @@ router.post("/newbp", async (req, res) => {
   }
 });
 
+router.post("/exportSheet", async (req, res) => {
+  console.log(req.body);
+  return res.status(200).send("Blood Pressure exports.");
+});
 export default router;
