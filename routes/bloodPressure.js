@@ -3,7 +3,7 @@ import BloodPressure from "../models/bloodPressure-model.js";
 import User from "../models/user-model.js";
 import { pressureValidation } from "../validation.js";
 import axios from "axios";
-import ExcelJs from "exceljs";
+import moment from "moment";
 
 const router = express.Router();
 
@@ -28,7 +28,7 @@ router.get("/getAllbp/:userId", async (req, res) => {
     const bpDetail = await BloodPressure.find({
       userId: userId,
     }).sort({
-      userAddDate: "desc",
+      userAddDate: "ASC",
     });
     return res.status(200).send({ success: true, data: bpDetail });
   } catch (e) {
@@ -48,7 +48,6 @@ router.get("/getBP", async (req, res) => {
       userId: userId,
       userAddDate: { $regex: new RegExp(date, "i") },
     });
-    console.log(bloodPressure);
   } catch (e) {
     return res.send(e);
   }
@@ -64,6 +63,7 @@ router.post("/newbp", async (req, res) => {
     userId,
     addDate,
     remark,
+    state, // 是新增或編輯
   } = req.body;
   let lineToken = "";
   console.log(req.body);
@@ -72,7 +72,7 @@ router.post("/newbp", async (req, res) => {
   const { error } = pressureValidation(req.body);
   if (error) return res.status(400).send(error.details[0].message);
 
-  const newBP = new BloodPressure({
+  const newBPDate = {
     systolicPressure: systolicPressure,
     diastolicPressure: diastolicPressure,
     heartRate: heartRate,
@@ -80,51 +80,69 @@ router.post("/newbp", async (req, res) => {
     userId: userId,
     userAddDate: addDate,
     remark: remark,
-  });
+  };
+
+  const newBP = new BloodPressure(newBPDate);
 
   try {
     // save new BP into DB
-    const saveBP = await newBP.save().then(async () => {
-      // find user and send line notify
-      await User.findOne({ userId: userId }).then(async (user) => {
-        if (user.lineToken) {
-          lineToken = user.lineToken;
-          console.log(user);
-          // 判斷血壓是否正常，提供訊息
-          let pressureMessage = "";
-          if (systolicPressure < 120 && diastolicPressure < 80) {
-            pressureMessage = "血壓為正常範圍～";
-          } else if (systolicPressure < 139 && diastolicPressure < 89) {
-            pressureMessage = "血壓為略高需注意！";
-          } else {
-            pressureMessage = "血壓高需注意，請注意身體狀況並就醫！";
+    let saveBP = [];
+    if (state === "add") {
+      saveBP = await newBP.save().then(async () => {
+        // find user and send line notify
+        await User.findOne({ userId: userId }).then(async (user) => {
+          if (user.lineToken) {
+            lineToken = user.lineToken;
+            console.log(user);
+            // 判斷血壓是否正常，提供訊息
+            let pressureMessage = "";
+            if (systolicPressure < 120 && diastolicPressure < 80) {
+              pressureMessage = "血壓為正常範圍～";
+            } else if (systolicPressure < 139 && diastolicPressure < 89) {
+              pressureMessage = "血壓為略高需注意！";
+            } else {
+              pressureMessage = "血壓高需注意，請注意身體狀況並就醫！";
+            }
+            // 發送line 通知
+            const date = moment(new Date(addDate)).format("YYYY/MM/DD");
+            const message = `${user.userName}先生/女士 家屬您好，${date}量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
+            // send line notify to user
+            await axios
+              .post("https://notify-api.line.me/api/notify", null, {
+                params: {
+                  message: message,
+                },
+                headers: {
+                  Authorization: `Bearer ${lineToken}`,
+                },
+              })
+              .then((response) => {
+                // console.log(response);
+              })
+              .catch((err) => {
+                console.log(err);
+              });
           }
-          // 發送line 通知
-          const message = `${user.userName}先生/女士 家屬您好，今天量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
-          // send line notify to user
-          await axios
-            .post("https://notify-api.line.me/api/notify", null, {
-              params: {
-                message: message,
-              },
-              headers: {
-                Authorization: `Bearer ${lineToken}`,
-              },
-            })
-            .then((response) => {
-              // console.log(response);
-            })
-            .catch((err) => {
-              console.log(err);
-            });
-        }
+        });
       });
-    });
-    res.status(200).send({
+    } else if (state === "edit") {
+      await BloodPressure.findOneAndUpdate(
+        {
+          userId: userId,
+          userAddDate: { $regex: new RegExp(addDate, "i") },
+        },
+        newBPDate,
+        {
+          new: true,
+        }
+      );
+    }
+    return res.status(200).send({
       message: "Success.",
       saveObject: saveBP,
     });
   } catch (err) {
+    console.log(err);
     return res.status(400).send("Blood Pressure not saved.");
   }
 });

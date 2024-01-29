@@ -52,7 +52,8 @@ export const pressureValidation = (data) => {
     }),
     userId: Joi.string().min(6).max(50).required().email(),
     addDate: Joi.date(),
-    remark: Joi.string(),
+    remark: Joi.string().allow(""), // 允許為空字串
+    state: Joi.string(),
   });
 
   return schema.validate(data);
