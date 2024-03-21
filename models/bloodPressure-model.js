@@ -4,6 +4,10 @@ const bloodPressureSchema = mongoose.Schema({
   id: {
     type: String,
   },
+  measureTime: {
+    // 量測時間
+    type: String, // 0->早上, 1->晚上
+  },
   systolicPressure: {
     // 收縮值
     type: Number,
