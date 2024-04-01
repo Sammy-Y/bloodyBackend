@@ -37,61 +37,141 @@ router.get("/getAllbp/:userId", async (req, res) => {
 router.get("/getDashBoardBp/:userId", async (req, res) => {
   const { userId } = req.params;
   const { choosePeriod } = req.query;
-  const date = moment(new Date()).format("YYYY/MM/DD"); // today
-  const sevenDaysAgo = moment().subtract(choosePeriod, 'days').format("YYYY/MM/DD"); // 特定日期之前
+  const date = moment(new Date()).format("YYYY/MM/DD/00:00:00"); // today
+  const sevenDaysAgo = moment().subtract(choosePeriod, 'days').format("YYYY/MM/DD/00:00:00"); // 特定日期之前
   try {
-    const bpDetail = await BloodPressure.find({
-      userId: userId,
-      date: {
-        $gte: sevenDaysAgo,
-        $lt: date,
+    const bpDetail = await BloodPressure.aggregate([
+      {
+        $match: {
+          userId: userId,
+          userAddDate: {
+            $gte: sevenDaysAgo,
+            $lte: date, // 包含今天
+          }
+        }
+      },
+      {
+        $group: {
+          _id : "$userAddDate",
+          sys: { $avg: "$systolicPressure" }, // 計算每組的sys平均值
+          dia: { $avg: "$diastolicPressure" }, // 計算每組的dia平均值
+          pul: { $avg: "$heartRate" } // 計算每組的pul平均值
+        }
+      },
+      {
+        $sort: { userAddDate: 1 } // 根據日期升序排序
+      },
+      {
+        $limit: choosePeriod * 2 // 限制結果數量
       }
-    }).sort({
-      userAddDate: "ASC",
-    }).limit(choosePeriod * 2);
+    ]);
 
-    // 定義一個函數來計算數值的平均值
-const calculateAverage = (values) => values.reduce((acc, curr) => acc + curr, 0) / values.length;
+    // 構建七天日期範圍
+    const dateRange = Array.from({ length: choosePeriod }, (_, i) =>
+      moment(date).subtract(choosePeriod- 1 - i, "days").startOf("day").format("YYYY/MM/DD/00:00:00")
+    );
 
-// 建立一個物件來存放合併後的資料
-const mergeBpList = {};
+    // 將補0的數據添加到結果中
+    const result = dateRange.map(date => {
+      const existingData = bpDetail.find(item => item._id === date);
+      if (existingData) {
+        return existingData;
+      } else {
+        return {
+          _id: date,
+          sys: 0,
+          dia: 0,
+          pul: 0
+        };
+    }
+    });
+    
 
-// 遍歷查詢結果
-bpDetail.forEach((item) => {
-  // 從每個項目中提取日期和數值
-  const { userAddDate, sys, dia, pul } = item;
-
-  // 如果mergeBpList中已經有該日期的項目，則將當前的數值加入並更新平均值
-  if (mergeBpList[userAddDate]) {
-    mergeBpList[userAddDate].sys.push(sys);
-    mergeBpList[userAddDate].dia.push(dia);
-    mergeBpList[userAddDate].pul.push(pul);
-  } else {
-    // 否則，在mergeBpList中建立一個新項目
-    mergeBpList[userAddDate] = {
-      sys: [sys],
-      dia: [dia],
-      pul: [pul],
-    };
-  }
-});
-
-// 遍歷mergeBpList，計算每個日期的平均值
-// for (const date in mergeBpList) {
-//   mergeBpList[date] = {
-//     sys: calculateAverage(mergeBpList[date].sys),
-//     dia: calculateAverage(mergeBpList[date].dia),
-//     pul: calculateAverage(mergeBpList[date].pul),
-//   };
-// }
-
-console.log(mergeBpList);
+    
 
 
-    return res.status(200).send({ success: true, data: bpDetail, mergeBpList:mergeBpList });
+    return res.status(200).send({ success: true, data: result });
   } catch (e) {
     return res.send(e);
   }
+})
+
+// 獲取血壓匯出資料
+router.get("/getBPExportDetail", async (req, res) => {
+  const { userId } = req.query;
+  const bpDetail = await BloodPressure.aggregate([
+    {
+      $match: {
+        userId: userId,
+      }
+    },
+    {
+      $lookup: {
+        from: "users", // 另一個集合的名稱
+        localField: "userId", // 本地字段是 BloodPressure 集合中的 userId
+        foreignField: "userId", // 外部字段是 User 集合中的 userId
+        as: "user" // 將匹配的文檔放入名為 user 的數組中
+      }
+    },
+    {
+      $group: {
+        _id: { $toDate: "$userAddDate" }, // 將日期字符串轉換為日期對象
+        bloodyData: { $push: "$$ROOT" }, // 將文檔添加到bloodyData數組中
+        userName: { $first: { $arrayElemAt: ["$user.userName", 0] } }, // 提取第一個用戶名稱
+      }
+    },
+    {
+      $sort: { "_id": 1 } // 根據日期升序排序
+    },
+    {
+      $project: {
+        date: "$_id", // 將_id字段重命名為date
+        _id: 0, // 隱藏_id字段
+        userName: 1, // 包含用戶名稱
+        bloodyData: 1 // 保留bloodyData數組
+      }
+    }
+  ]);
+
+  const formattedBpDetail = bpDetail.map(item => {
+    const date = new Date(item.date);
+    // 格式化日期為指定格式
+    const formattedDate = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    let morningData = { dia: 0, sys: 0, pul: 0 };
+    let afternoonData = { dia: 0, sys: 0, pul: 0 };
+  
+    item.bloodyData.forEach(data => {
+      if (data.measureTime === "0") {
+        // 上午
+        morningData = {
+          dia: data.diastolicPressure,
+          sys: data.systolicPressure,
+          pul: data.heartRate
+        };
+      } else {
+        // 下午
+        afternoonData = {
+          dia: data.diastolicPressure,
+          sys: data.systolicPressure,
+          pul: data.heartRate
+        };
+      }
+    });
+  
+    // 返回格式化的對象
+    return {
+      date: formattedDate,
+      user_name: item.userName,
+      mor_dia: morningData.dia,
+      mor_sys: morningData.sys,
+      mor_pul: morningData.pul,
+      aft_dia: afternoonData.dia,
+      aft_sys: afternoonData.sys,
+      aft_pul: afternoonData.pul
+    };
+  });
+
+  return res.status(200).send({ success: true, data: formattedBpDetail });
 })
 
 // 依照日期獲取血壓資料
