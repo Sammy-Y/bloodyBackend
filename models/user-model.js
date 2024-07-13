@@ -40,6 +40,10 @@ const userSchema = mongoose.Schema({
     type: Date,
     default: Date.now(),
   },
+}, 
+// 取消 __v 欄位
+{ 
+  versionKey: false 
 });
 
 // mongoose schema middleware

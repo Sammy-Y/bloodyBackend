@@ -4,8 +4,131 @@ import User from "../models/user-model.js";
 import { pressureValidation } from "../validation.js";
 import axios from "axios";
 import moment from "moment";
+import cron from "node-cron";
 
 const router = express.Router();
+
+// 設置每 10 秒執行一次的任務
+cron.schedule('*/10 * * * * *', async () => {
+  const date = moment(new Date()).format("YYYY/MM/DD/00:00:00"); // today
+  // console.log('每 10 秒執行一次的任務');
+  const allUser = await User.find();
+  allUser.forEach( async (user) => {
+    // 有設定 line notify
+    if(user.lineToken){
+      const lineToken = user.lineToken;
+      let message = "";
+      const bloodPressure = await BloodPressure.find({
+        userId: user.userId,
+        measureTime: "1", // 上午
+        userAddDate: { $regex: new RegExp(date, "i") },
+      });
+      // console.log(bloodPressure);
+      if(bloodPressure.length === 0){ // 沒有血壓紀錄，需要提醒
+        const messageDate = moment(new Date()).format("YYYY/MM/DD");
+        message = `${user.userName}先生/女士 家屬您好，${messageDate}下午血壓尚未量測，提醒您不要忘記囉！`;
+        // send line notify to user
+        // await axios
+        // .post("https://notify-api.line.me/api/notify", null, {
+        //   params: {
+        //     message: message,
+        //   },
+        //   headers: {
+        //     Authorization: `Bearer ${lineToken}`,
+        //   },
+        // })
+        // .then((response) => {
+        //   // console.log(response);
+        // })
+        // .catch((err) => {
+        //   console.log(err);
+        // });
+      }
+    }
+  });
+});
+
+// 設置每天早上10點執行的任務
+cron.schedule('0 10 * * *', async () => {
+  console.log('每天早上10點發送通知');
+  // 在這裡添加你的通知發送代碼
+  const date = moment(new Date()).format("YYYY/MM/DD/00:00:00"); // today
+  const allUser = await User.find();
+  allUser.forEach( async (user) => {
+    // 有設定 line notify
+    if(user.lineToken){
+      const lineToken = user.lineToken;
+      let message = "";
+      const bloodPressure = await BloodPressure.find({
+        userId: user.userId,
+        measureTime: "0", // 上午
+        userAddDate: { $regex: new RegExp(date, "i") },
+      });
+      console.log(bloodPressure);
+      if(bloodPressure.length === 0){ // 沒有血壓紀錄，需要提醒
+        const messageDate = moment(new Date()).format("YYYY/MM/DD");
+        message = `${user.userName}先生/女士 家屬您好，${messageDate}上午血壓尚未量測，提醒您不要忘記囉！`;
+        // send line notify to user
+        await axios
+        .post("https://notify-api.line.me/api/notify", null, {
+          params: {
+            message: message,
+          },
+          headers: {
+            Authorization: `Bearer ${lineToken}`,
+          },
+        })
+        .then((response) => {
+          // console.log(response);
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+      }
+    }
+  });
+});
+
+// 設置每天晚上8點執行的任務
+cron.schedule('0 20 * * *', async () => {
+  console.log('每天晚上20點發送通知');
+  // 在這裡添加你的通知發送代碼
+  const date = moment(new Date()).format("YYYY/MM/DD/00:00:00"); // today
+  const allUser = await User.find();
+  allUser.forEach( async (user) => {
+    // 有設定 line notify
+    if(user.lineToken){
+      const lineToken = user.lineToken;
+      let message = "";
+      const bloodPressure = await BloodPressure.find({
+        userId: user.userId,
+        measureTime: "1", // 下午
+        userAddDate: { $regex: new RegExp(date, "i") },
+      });
+      console.log(bloodPressure);
+      if(bloodPressure.length === 0){ // 沒有血壓紀錄，需要提醒
+        const messageDate = moment(new Date()).format("YYYY/MM/DD");
+        message = `${user.userName}先生/女士 家屬您好，${messageDate}下午血壓尚未量測，提醒您不要忘記囉！`;
+        // send line notify to user
+        await axios
+        .post("https://notify-api.line.me/api/notify", null, {
+          params: {
+            message: message,
+          },
+          headers: {
+            Authorization: `Bearer ${lineToken}`,
+          },
+        })
+        .then((response) => {
+          // console.log(response);
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+      }
+    }
+  });
+});
 
 router.use((req, res, next) => {
   console.log("A request is coming into blood pressure api...");
@@ -243,9 +366,9 @@ router.post("/newbp", async (req, res) => {
               console.log(user);
               // 判斷血壓是否正常，提供訊息
               let pressureMessage = "";
-              if (systolicPressure < 120 && diastolicPressure < 80) {
+              if (bloodyData.sys < 120 && bloodyData.dia < 80) {
                 pressureMessage = "血壓為正常範圍～";
-              } else if (systolicPressure < 139 && diastolicPressure < 89) {
+              } else if (bloodyData.sys < 130 && bloodyData.dia < 89) {
                 pressureMessage = "血壓為略高需注意！";
               } else {
                 pressureMessage = "血壓高需注意，請注意身體狀況並就醫！";
@@ -255,10 +378,10 @@ router.post("/newbp", async (req, res) => {
               let message = "";
               switch (bloodyData.measureTime) {
                 case "0": // 上午
-                  message = `${user.userName}先生/女士 家屬您好，${date}上午量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
+                  message = `${user.userName}先生/女士 家屬您好，${date}上午量測血壓的紀錄為收縮壓(SYS)為${bloodyData.sys}，舒張壓(DIA)為${bloodyData.dia}，心跳(PUL)為${bloodyData.pul}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
                   break;
                 case "1": // 下午
-                  message = `${user.userName}先生/女士 家屬您好，${date}下午量測血壓的紀錄為收縮壓(SYS)為${systolicPressure}，舒張壓(DIA)為${diastolicPressure}，心跳(PUL)為${heartRate}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
+                  message = `${user.userName}先生/女士 家屬您好，${date}下午量測血壓的紀錄為收縮壓(SYS)為${bloodyData.sys}，舒張壓(DIA)為${bloodyData.dia}，心跳(PUL)為${bloodyData.pul}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
                   break;
               }
               // send line notify to user

@@ -21,11 +21,11 @@ const bloodPressureSchema = mongoose.Schema({
     type: Number,
     minLength: 30,
   },
-  tester: {
-    // 測試者
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User", // connect with User collection
-  },
+  // tester: {
+  //   // 測試者
+  //   type: mongoose.Schema.Types.ObjectId,
+  //   ref: "User", // connect with User collection
+  // },
   userId: {
     type: String,
   },
@@ -37,11 +37,15 @@ const bloodPressureSchema = mongoose.Schema({
     // 備註
     type: String,
   },
-  date: {
-    // 測試日期、時間
-    type: Date,
-    default: Date.now(),
-  },
+  // date: {
+  //   // 測試日期、時間
+  //   type: Date,
+  //   default: Date.now(),
+  // },
+}, 
+// 取消 __v 欄位
+{ 
+  versionKey: false 
 });
 
 export default mongoose.model("BloodPressure", bloodPressureSchema);

@@ -165,6 +165,7 @@ router.post("/register", async (req, res) => {
   // register the user
   const newUser = new User({
     userName: userName,
+    googleId: "",
     userId: userId,
     userPw: userPw,
   });
@@ -279,6 +280,7 @@ router.post("/sendVerify", async (req, res) => {
 // google login, register
 router.post("/google/login", async (req, res) => {
   const { userData } = req.body;
+  console.log(userData)
 
   // check if userId exist.
   // const userIdExist = await User.findOne({ googleId: userData.googleId });
