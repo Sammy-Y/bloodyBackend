@@ -189,6 +189,9 @@ router.get("/getDashBoardBp/:userId", async (req, res) => {
       }
     ]);
 
+    // 獲取上週平均血壓
+    const { avgSys, avgDia } = await getLastWeekAvg(userId, "0", date);
+
     // 構建七天日期範圍
     const dateRange = Array.from({ length: choosePeriod }, (_, i) =>
       moment(date).subtract(choosePeriod- 1 - i, "days").startOf("day").format("YYYY/MM/DD/00:00:00")
@@ -208,12 +211,14 @@ router.get("/getDashBoardBp/:userId", async (req, res) => {
         };
     }
     });
-    
 
-    
+    const returnResult = {
+      result,
+      avgDia,
+      avgSys
+    }
 
-
-    return res.status(200).send({ success: true, data: result });
+    return res.status(200).send({ success: true, data: returnResult });
   } catch (e) {
     return res.send(e);
   }
@@ -299,17 +304,21 @@ router.get("/getBPExportDetail", async (req, res) => {
 
 // 依照日期獲取血壓資料
 router.get("/getBP", async (req, res) => {
-  // console.log(req.query);
   const { userId, date } = req.query;
 
   console.log(userId, date);
   let bloodPressure = [];
   try {
+    // 上週血壓平均值處理
+    const { avgSys, avgDia } = await getLastWeekAvg(userId);
+    console.log(avgSys, avgDia);
+
     bloodPressure = await BloodPressure.find({
       userId: userId,
       userAddDate: { $regex: new RegExp(date, "i") },
     });
   } catch (e) {
+    console.log(e);
     return res.send(e);
   }
   return res.status(200).send({ success: true, bloodPressure: bloodPressure });
@@ -318,15 +327,8 @@ router.get("/getBP", async (req, res) => {
 // making a new BP record
 router.post("/newbp", async (req, res) => {
   const {
-    systolicPressure,
-    diastolicPressure,
-    heartRate,
     userId,
     addDate,
-    remark,
-    state, // 是新增或編輯
-    morningData,
-    afternoonData,
     bloodyList,
   } = req.body;
   let lineToken = "";
@@ -364,26 +366,38 @@ router.post("/newbp", async (req, res) => {
             if (user.lineToken) {
               lineToken = user.lineToken;
               console.log(user);
+              // 上週血壓平均值處理
+              const { avgSys, avgDia } = await getLastWeekAvg(userId);
+
+              // 與前一週血壓平均比較，提供訊息
+              let compareMessage = "";
+              if(avgSys > 0 && avgDia > 0) { // 上週有血壓紀錄才比較
+                if(bloodyData.sys > avgSys || bloodyData.dia > avgDia) { // 新增的血壓比上週平均高
+                  compareMessage = "與過去七天的平均值相比有上升趨勢，請留意身體狀況。";
+                }
+              }
+
               // 判斷血壓是否正常，提供訊息
               let pressureMessage = "";
               if (bloodyData.sys < 120 && bloodyData.dia < 80) {
-                pressureMessage = "血壓為正常範圍～";
+                pressureMessage = "血壓為正常範圍內。";
               } else if (bloodyData.sys < 130 && bloodyData.dia < 89) {
-                pressureMessage = "血壓為略高需注意！";
+                pressureMessage = "血壓略高需注意！";
               } else {
-                pressureMessage = "血壓高需注意，請注意身體狀況並就醫！";
+                pressureMessage = "血壓偏高，需注意身體狀況並及時就醫。";
               }
               // 發送line 通知
               const date = moment(new Date(addDate)).format("YYYY/MM/DD");
-              let message = "";
+              let measureTimeMessage = "";
               switch (bloodyData.measureTime) {
                 case "0": // 上午
-                  message = `${user.userName}先生/女士 家屬您好，${date}上午量測血壓的紀錄為收縮壓(SYS)為${bloodyData.sys}，舒張壓(DIA)為${bloodyData.dia}，心跳(PUL)為${bloodyData.pul}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
+                  measureTimeMessage = "上午"
                   break;
                 case "1": // 下午
-                  message = `${user.userName}先生/女士 家屬您好，${date}下午量測血壓的紀錄為收縮壓(SYS)為${bloodyData.sys}，舒張壓(DIA)為${bloodyData.dia}，心跳(PUL)為${bloodyData.pul}，${pressureMessage}。 Bloody Help關心您的血壓健康。`;
+                  measureTimeMessage = "下午"
                   break;
               }
+              const message = `${user.userName}先生/女士 家屬您好，${date}${measureTimeMessage}血壓量測結果為收縮壓(SYS)：${bloodyData.sys}，舒張壓(DIA)：${bloodyData.dia}，心跳(PUL)：${bloodyData.pul}，${pressureMessage}${compareMessage}Bloody Help關心您的血壓健康。`;
               // send line notify to user
               await axios
                 .post("https://notify-api.line.me/api/notify", null, {
@@ -429,4 +443,51 @@ router.post("/exportSheet", async (req, res) => {
   console.log(req.body);
   return res.status(200).send("Blood Pressure exports.");
 });
+
+// 獲取上週血壓平均的日期
+const getLastWeekAvg = async (userId) => {
+  const addDate = moment(new Date());
+  const sevenDaysAgo = moment().subtract(6, 'days'); // 特定日期之前
+  // const dayOfWeek = addDate.day(); // 0 是星期天，1 是星期一，依此类推
+  // const startOfLastWeek = addDate.subtract(dayOfWeek + 7, 'days').startOf('day'); // 上周日
+  // const endOfLastWeek = startOfLastWeek.clone().add(6, 'days').endOf('day'); // 上周六
+  const formatStartWeek = moment(sevenDaysAgo).format("YYYY/MM/DD/00:00:00");
+  const formatEndWeek = moment(addDate).format("YYYY/MM/DD/00:00:00");
+  console.log("Start of last week:", formatStartWeek); // 上週第一天（日）
+  console.log("End of last week:", formatEndWeek); // 上週最後一天（六）
+
+  // 上週血壓平均值處理
+  const bpDetail = await BloodPressure.aggregate([
+    {
+      $match: {
+        userId: userId,
+        userAddDate: {
+          $gte: formatStartWeek,
+          $lte: formatEndWeek,
+        },
+        // measureTime: measureTime,
+      }
+    },
+  ]);
+  console.log(bpDetail)
+  // 計算平均
+  let totalSys = 0;
+  let totalDia = 0;
+  bpDetail.forEach( (bp) => {
+    totalSys += bp.systolicPressure;
+    totalDia += bp.diastolicPressure;
+  });
+
+  let avgSys = 0;
+  let avgDia = 0;
+  if(bpDetail.length > 0){
+    avgSys = Math.round(totalSys / bpDetail.length);
+    avgDia = Math.round(totalDia / bpDetail.length);
+  }
+
+  return {
+    avgSys,
+    avgDia
+  };
+}
 export default router;
